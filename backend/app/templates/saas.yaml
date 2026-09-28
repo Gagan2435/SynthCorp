@@ -1,0 +1,78 @@
+# A subscription software company: customers pick a plan, get billed monthly,
+# some churn, and file more support tickets in the weeks before they leave.
+name: saas_company
+seed: 42
+locale: en_IN
+tables:
+  - name: plans
+    rows: 4
+    columns:
+      - {name: id, type: id}
+      - {name: name, type: cycle, values: [Free, Starter, Pro, Enterprise]}
+      - {name: monthly_price, type: cycle, values: [0, 999, 4999, 19999]}
+
+  - name: customers
+    rows: 1000
+    columns:
+      - {name: id, type: id}
+      - {name: name, type: person_name}
+      - {name: email, type: email, unique: true}
+      - {name: company, type: company}
+      - {name: city, type: city}
+      - name: signup_date
+        type: date
+        start: "2023-01-01"
+        end: "2025-06-30"
+        seasonality: {peak_months: [1, 2, 9], strength: 0.6}
+      - {name: plan_id, type: fk, ref: plans.id}
+      # 60% of customers never churn; the rest leave 2-23 months after signup (some leave dates fall past
+      # the end of the data and stay empty too).
+      - {name: churn_date, type: date_after, after: signup_date, min_days: 60, max_days: 700, max_date: "2025-12-31", null_rate: 0.6}
+
+  - name: subscriptions
+    rows: 1000
+    columns:
+      - {name: id, type: id}
+      - {name: customer_id, type: fk, ref: customers.id, distribution: one_to_one}
+      - {name: plan_id, type: lookup, path: [customer_id, plan_id]}
+      - {name: start_date, type: date_from_parent, fk: customer_id, parent_column: signup_date, max_days: 14}
+      - {name: status, type: parent_flag, fk: customer_id, parent_column: churn_date, if_null: active, if_not_null: cancelled}
+
+  - name: invoices
+    rows: 8000
+    columns:
+      - {name: id, type: id}
+      # zipf: a few customers generate most invoices.
+      - {name: customer_id, type: fk, ref: customers.id, distribution: zipf}
+      - name: issued_on
+        type: date_from_parent
+        fk: customer_id
+        parent_column: signup_date
+        until_column: churn_date
+        max_days: 700
+        max_date: "2025-12-31"
+      - {name: amount, type: lookup, path: [customer_id, plan_id, monthly_price]}
+      - {name: status, type: choice, values: [paid, failed, refunded], weights: [0.9, 0.06, 0.04]}
+
+  - name: tickets
+    rows: 3000
+    columns:
+      - {name: id, type: id}
+      # customers who churn get 3x more tickets
+      - name: customer_id
+        type: fk
+        ref: customers.id
+        distribution: zipf
+        boost: {column: churn_date, factor: 3}
+      # and 60% of their tickets land in the 45 days before they leave
+      - name: created_on
+        type: date_around_event
+        fk: customer_id
+        start_column: signup_date
+        event_column: churn_date
+        window_days: 45
+        probability: 0.6
+        max_date: "2025-12-31"
+      - {name: category, type: choice, values: [billing, bug, how_to, feature_request], weights: [0.35, 0.3, 0.2, 0.15]}
+      - {name: priority, type: choice, values: [low, medium, high], weights: [0.5, 0.35, 0.15]}
+      - {name: subject, type: text, words: 7}

@@ -1,0 +1,33 @@
+# A small online shop: shoppers, a product catalogue and orders.
+name: online_shop
+seed: 7
+locale: en_IN
+tables:
+  - name: shoppers
+    rows: 500
+    columns:
+      - {name: id, type: id}
+      - {name: name, type: person_name}
+      - {name: email, type: email, unique: true}
+      - {name: city, type: city}
+      - {name: joined_on, type: date, start: "2024-01-01", end: "2025-09-30", seasonality: {peak_months: [10, 11], strength: 1.0}}
+
+  - name: products
+    rows: 60
+    columns:
+      - {name: id, type: id}
+      - {name: sku, type: uuid}
+      - {name: category, type: choice, values: [electronics, home, fashion, books], weights: [0.3, 0.3, 0.25, 0.15]}
+      - {name: price, type: float, min: 99, max: 24999, decimals: 2}
+      - {name: in_stock, type: bool, p: 0.9}
+
+  - name: orders
+    rows: 4000
+    columns:
+      - {name: id, type: id}
+      - {name: shopper_id, type: fk, ref: shoppers.id, distribution: zipf, zipf_s: 0.9}
+      - {name: product_id, type: fk, ref: products.id, distribution: zipf}
+      - {name: unit_price, type: lookup, path: [product_id, price]}
+      - {name: quantity, type: int, min: 1, max: 5}
+      - {name: ordered_on, type: date_from_parent, fk: shopper_id, parent_column: joined_on, max_days: 400, max_date: "2025-12-31"}
+      - {name: status, type: choice, values: [delivered, shipped, returned, cancelled], weights: [0.75, 0.1, 0.08, 0.07]}
