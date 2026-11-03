@@ -1,0 +1,18 @@
+# Render Blueprint: deploys the FastAPI backend from ./backend using its Dockerfile.
+services:
+  - type: web
+    name: synthcorp-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /api/templates
+    envVars:
+      # SQLite by default (zero setup, resets when the free instance restarts).
+      # For persistent MySQL, replace with: mysql+pymysql://user:pass@host:3306/db?charset=utf8mb4
+      - key: DATABASE_URL
+        value: sqlite:////tmp/synthcorp.db
+      # Public demo with no auth: keep runs small.
+      - key: MAX_ROWS_PER_TABLE
+        value: "20000"
+      - key: MAX_TOTAL_ROWS
+        value: "50000"

@@ -1,0 +1,101 @@
+diff --git a/.gitignore b/.gitignore
+index e961275..a86be51 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,3 +5,11 @@ __pycache__/
+ node_modules/
+ .next/
+ .env
++
++# local environments
++.venv/
++venv/
++.env.local
++.vercel
++next-env.d.ts
++*.tsbuildinfo
+diff --git a/backend/.dockerignore b/backend/.dockerignore
+index 804037b..45779b3 100644
+--- a/backend/.dockerignore
++++ b/backend/.dockerignore
+@@ -2,3 +2,5 @@ __pycache__
+ *.db
+ .pytest_cache
+ tests
++.venv
++venv
+diff --git a/backend/Dockerfile b/backend/Dockerfile
+index 7ae2c5c..eb1a79c 100644
+--- a/backend/Dockerfile
++++ b/backend/Dockerfile
+@@ -6,4 +6,4 @@ RUN pip install --no-cache-dir -r requirements.txt
+ COPY . .
+ EXPOSE 8000
+ # Apply migrations, then serve. The compose file waits for MySQL to be healthy first.
+-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
++CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+diff --git a/frontend/.env.example b/frontend/.env.example
+new file mode 100644
+index 0000000..e32ebff
+--- /dev/null
++++ b/frontend/.env.example
+@@ -0,0 +1,2 @@
++# URL of the deployed FastAPI backend (no trailing slash). Used at build time.
++BACKEND_URL=https://synthcorp-api.onrender.com
+diff --git a/frontend/lib/api.ts b/frontend/lib/api.ts
+index a5a3c92..fa2bd9b 100644
+--- a/frontend/lib/api.ts
++++ b/frontend/lib/api.ts
+@@ -63,6 +63,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
+   if (!res.ok) {
+     let details: string[] = [];
+     let message = `Request failed (${res.status})`;
++    if ([502, 503, 504].includes(res.status)) message = "The server is waking up (free hosting sleeps when idle). Wait about a minute and try again.";
+     try {
+       const body = await res.json();
+       if (body?.detail?.errors) details = body.detail.errors;
+diff --git a/frontend/next.config.js b/frontend/next.config.js
+index 290dde0..ff053b9 100644
+--- a/frontend/next.config.js
++++ b/frontend/next.config.js
+@@ -1,10 +1,13 @@
+ /** @type {import('next').NextConfig} */
+ // The browser only ever talks to this Next.js server; /api/* is forwarded to FastAPI.
+-// That avoids CORS entirely. BACKEND_URL is read at build time (see the Dockerfile).
+-const backend = process.env.BACKEND_URL || "http://localhost:8000";
++// That avoids CORS entirely. BACKEND_URL is read at build time:
++//   - Docker: set by the Dockerfile / docker-compose
++//   - Vercel: set it in Project Settings -> Environment Variables (your Render URL)
++const backend = (process.env.BACKEND_URL || "http://localhost:8000").replace(/\/+$/, "");
+ 
+ module.exports = {
+-  output: "standalone",
++  // "standalone" is for the Docker image; Vercel does its own packaging.
++  ...(process.env.VERCEL ? {} : { output: "standalone" }),
+   async rewrites() {
+     return [{ source: "/api/:path*", destination: `${backend}/api/:path*` }];
+   },
+diff --git a/render.yaml b/render.yaml
+new file mode 100644
+index 0000000..f6505b2
+--- /dev/null
++++ b/render.yaml
+@@ -0,0 +1,18 @@
++# Render Blueprint: deploys the FastAPI backend from ./backend using its Dockerfile.
++services:
++  - type: web
++    name: synthcorp-api
++    runtime: docker
++    rootDir: backend
++    plan: free
++    healthCheckPath: /api/templates
++    envVars:
++      # SQLite by default (zero setup, resets when the free instance restarts).
++      # For persistent MySQL, replace with: mysql+pymysql://user:pass@host:3306/db?charset=utf8mb4
++      - key: DATABASE_URL
++        value: sqlite:////tmp/synthcorp.db
++      # Public demo with no auth: keep runs small.
++      - key: MAX_ROWS_PER_TABLE
++        value: "20000"
++      - key: MAX_TOTAL_ROWS
++        value: "50000"

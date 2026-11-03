@@ -63,6 +63,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let details: string[] = [];
     let message = `Request failed (${res.status})`;
+    if ([502, 503, 504].includes(res.status)) message = "The server is waking up (free hosting sleeps when idle). Wait about a minute and try again.";
     try {
       const body = await res.json();
       if (body?.detail?.errors) details = body.detail.errors;

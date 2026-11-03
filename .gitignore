@@ -5,3 +5,11 @@ __pycache__/
 node_modules/
 .next/
 .env
+
+# local environments
+.venv/
+venv/
+.env.local
+.vercel
+next-env.d.ts
+*.tsbuildinfo
