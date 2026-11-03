@@ -1,4 +1,5 @@
 # SynthCorp
+live : https://synth-corp.vercel.app/
 
 **Describe a company. Get its data.**
 
